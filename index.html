@@ -1,0 +1,431 @@
+<!doctype html>
+<head>
+  <meta content="width=device-width, initial-scale=1" name="viewport" />
+  <link rel="preconnect" href="https://rsms.me/">
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+  <title>SLO burn rate alert calculator</title>
+  <style>
+    :root {
+      font-family: 'Inter', sans-serif;
+    }
+
+    @supports (font-variation-settings: normal) {
+      :root {
+        font-family: 'Inter var', sans-serif;
+      }
+    }
+
+    body {
+      --border: #cdcdcd;
+      --border-secondary: #cdcdcd;
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    h1, h2 {
+      margin: 1.5rem 0 0 0;
+    }
+
+    li {
+      margin: 0.4rem 0;
+    }
+
+    code {
+      font-size: 1rem;
+    }
+
+    .airlock {
+      width: 80%;
+      margin: 5rem auto 2rem auto;
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+
+    .description {
+      width: 80%;
+      margin: 0 auto;
+    }
+
+    .params {
+      width: 30%;
+      margin-right: 2rem;
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-group label {
+      display: inline-block;
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+    }
+
+    .form-group input {
+      box-sizing: border-box;
+      display: block;
+      width: 100%;
+      padding: 0.375rem 0.75rem;
+      font-size: 1rem;
+      line-height: 1.5;
+      border: 1px solid var(--border);
+      border-radius: 0.25rem;
+    }
+
+    .results {
+      border: 1px solid var(--border);
+      border-collapse: separate;
+      border-radius: 0.25rem;
+      border-spacing: 0;
+      margin: 1rem 0;
+    }
+
+    .results td, .results th {
+      padding: 0.25rem;
+      border-width: 1px;
+      width: 10rem;
+      border-bottom: 1px solid var(--border-secondary);
+      border-left: 1px solid var(--border-secondary);
+      border-right: 0 solid var(--border-secondary);
+      border-top: 0 solid var(--border-secondary);
+    }
+
+    .results tr th:first-child, .results tr td:first-child {
+      width: 5rem;
+      min-width: 5rem;
+      max-width: 5rem;
+    }
+
+    .results th small {
+      display: inline-block;
+      font-weight: normal;
+      color: #666;
+    }
+
+    .results td.no-alert {
+      color: #aaa;
+    }
+
+    .break {
+      flex-basis: 100%;
+      height: 0;
+    }
+
+    @media (max-width: 800px) {
+      .airlock {
+        width: 100%;
+        margin: 5rem 0 2rem 0;
+        flex-direction: column;
+      }
+
+      .params {
+        width: auto;
+        margin: 0 2rem;
+      }
+
+      .description {
+        width: auto;
+        margin: 0;
+      }
+
+      h1, h2, p, ul, .results {
+        margin: 2rem;
+      }
+    }
+
+  </style>
+</head>
+<body>
+  <div class="airlock">
+    <form name="params" class="params" action="javascript:void(0);">
+      <div class="form-group">
+        <label for="slo">SLO</label>
+        <input name="slo" type="text" value="99.9%">
+      </div>
+      <div class="form-group">
+        <label for="slo-interval">SLO lookback interval</label>
+        <input name="slo-interval" type="text" value="30d">
+      </div>
+      <div class="form-group">
+        <label for="exhaustion-interval">Burn alert exhaustion interval</label>
+        <input name="exhaustion-interval" type="text" value="1d">
+      </div>
+    </form>
+
+    <table class="results">
+      <tr>
+        <th scope="col">error rate</th>
+        <th scope="col">time to alert</th>
+        <th scope="col">
+          budget burned
+          <small>(at alert, or after <span class="slo-interval">the SLO interval</span> if no alert fires)</small>
+        </th>
+      </tr>
+      <tr>
+        <th scope="row">0.01%</th>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <th scope="row">0.05%</th>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <th scope="row">0.10%</th>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <th scope="row">0.50%</th>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <th scope="row">1.00%</th>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <th scope="row">5.00%</th>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <th scope="row">10.00%</th>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <th scope="row">50.00%</th>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <th scope="row">90.00%</th>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <th scope="row">100.00%</th>
+        <td></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="description">
+    <h1>SLO burn rate alert calculator</h1>
+    <h2>What is this?</h2>
+    <p>
+      This is a little simulator to help you build intuition about SLO burn rate
+      alerting. You can learn more about the theory behind burn rate alerting in
+      the
+      <a href="https://sre.google/workbook/alerting-on-slos/#4-alert-on-burn-rate">
+        SLO Workbook section on Burn Rate</a>.
+    </p>
+    <h2>How do I use it?</h2>
+    <p>
+      Change the values in the form and see how the "time to alert" changes for
+      different observed error rates in the table. For example, if you set the
+      SLO to <code>99.95%</code> over a <code>14d</code> interval, and you
+      configure the burn alert exhaustion interval to be <code>6h</code>, you
+      should find that:
+    </p>
+    <ul>
+      <li>You'll be alerted to total failure in about <code>2m 32s</code>.</li>
+      <li>You'll be alerted to a 10% failure rate after a bit more than <code>25m</code>.</li>
+      <li>
+        Even though it's above the SLO error rate of <code>0.05%</code>, an
+        error rate of <code>1%</code> will never trigger an alert, because it
+        will take more than <code>16h</code> for an error rate of <code>1%</code>
+        to exhaust your error budget, and that's longer than the alert
+        exhaustion interval of <code>6h</code>.
+      </li>
+    </ul>
+    <h2>Why have I burned 25% of my budget by the time the alert fires?</h2>
+    <p>
+      This calculator attempts to emulate the way that <a href="https://www.honeycomb.io/">
+      Honeycomb</a> implements burn alerts.
+    </p>
+    <p>
+      In Honeycomb, you don't configure burn rate and lookback interval
+      independently. You specify an error budget exhaustion interval which
+      defines the sensitivity of the alert, and &frac14; of that exhaustion
+      interval is used as the alert lookback interval. That means that when the
+      alert fires, you've consumed (at least) 25% of your error budget.
+    </p>
+    <h2>Why does it say that I'll burn more than 100% of my error budget?</h2>
+    <p>
+      Because that's what will happen if you choose an alert exhaustion
+      interval shorter than your SLO lookback interval!
+    </p>
+    <p>
+      This is why it's often a good idea to:
+    </p>
+    <ul>
+      <li>
+        Configure a burn alert with a long exhaustion interval to notify you
+        non-urgently (e.g. via Slack, a ticketing system, or email) about smaller
+        burn rates.
+      </li>
+      <li>
+        Keep an eye on your error budget over time so that you can adjust your
+        team's behaviour. Budget burning down faster than you'd like? Fix some
+        bugs or ease off on the risky changes.
+      </li>
+    </ul>
+    <h2>Can it show me how long it would take to burn down my error budget completely?</h2>
+    <p>
+      Yes! Put <code>0</code> (zero) in the exhaustion interval box.
+    </p>
+    <h2>This is totally unrealistic!</h2>
+    <p>
+      It absolutely is. It makes several simplifying assumptions that are pretty
+      unlikely to be true in real life. It assumes that the rate of SLI events
+      is constant, and it assumes that any introduced error rates are constant.
+      Ironically, it's when these assumptions are violated that burn rate
+      alerting can be most useful.
+    </p>
+    <p>
+      If you'd like to help extend the calculator to simulate more interesting
+      scenarios such as changing error rates, please <a
+     href="https://github.com/nickstenning/burnalert">contribute on GitHub!</a>
+    </p>
+    <h2>Who made this?</h2>
+    <p>
+      <a href="https://twitter.com/nickstenning">Nick Stenning</a> did. If you
+      found it helpful, please say hi on Twitter!
+    </p>
+  </div>
+
+  <script>
+    // What proportion of the exhaustion interval is used for alert lookback?
+    const LOOKBACK_FRACTION = 0.25;
+
+    const DURATIONS = new Map();
+    DURATIONS.set("d", 86400);
+    DURATIONS.set("h", 3600);
+    DURATIONS.set("m", 60);
+    DURATIONS.set("s", 1);
+
+    function calculate() {
+      console.log('calculate called');
+      const params = document.querySelector("form[name=params]");
+      const results = document.querySelector("table.results");
+      const slo = document.querySelector("table span.slo-interval");
+      const p = validate(params);
+      if (!p) {
+        return;
+      }
+
+      slo.textContent = renderDuration(p.sloInterval);
+
+      const errorRates = [...results.querySelectorAll("tr:not(:first-of-type) th")].map(e => parsePercentage(e.textContent));
+
+      errorRates.forEach((errorRate, errorRateIdx) => {
+        const result = timeToAlert(errorRate, p.slo, p.sloInterval, p.exhaustionInterval);
+
+        const cell = results.querySelector(`tr:nth-child(${2 + errorRateIdx}) td:nth-of-type(1)`);
+        const budgetCell = results.querySelector(`tr:nth-child(${2 + errorRateIdx}) td:nth-of-type(2)`);
+
+        if (isNaN(result.alertsAfter)) {
+          cell.classList.add('no-alert');
+          cell.classList.remove('alert');
+        } else {
+          cell.classList.add('alert');
+          cell.classList.remove('no-alert');
+        }
+        cell.textContent = renderDuration(result.alertsAfter);
+        budgetCell.textContent = renderPercentage(result.budgetBurned);
+      });
+    }
+
+    function timeToAlert(errorRate, slo, sloInterval, exhaustionInterval) {
+      const sloErrorRate = 1 - slo;
+      const burnRatio = errorRate / sloErrorRate;
+      const maxBurnRatio = exhaustionInterval === 0 ? 1 : sloInterval / exhaustionInterval;
+      const lookbackInterval = exhaustionInterval === 0 ? sloInterval : LOOKBACK_FRACTION * exhaustionInterval;
+
+      let result = {
+        alertsAfter: NaN,
+        budgetBurned: 0,
+        burnRatio: burnRatio,
+      };
+
+      if (burnRatio > maxBurnRatio) {
+        result.alertsAfter = lookbackInterval * (maxBurnRatio / burnRatio);
+        result.budgetBurned = burnRatio * (result.alertsAfter/sloInterval);
+      } else {
+        result.budgetBurned = burnRatio;
+      }
+
+      return result;
+    }
+
+    function validate(form) {
+      const slo = parseFloat(form['slo'].value) / 100;
+      const sloInterval = parseDuration(form['slo-interval'].value);
+      const exhaustionInterval = parseDuration(form['exhaustion-interval'].value);
+
+      if (isNaN(slo) || isNaN(sloInterval) || isNaN(exhaustionInterval)) {
+        return false;
+      }
+
+      if (slo <= 0 || slo > 100) {
+        return false;
+      }
+
+      if (sloInterval <= 0) {
+        return false;
+      }
+
+      if (exhaustionInterval < 0) {
+        return false;
+      }
+
+      return { slo, sloInterval, exhaustionInterval };
+    }
+
+    function parsePercentage(str) {
+      const val = str.slice(0, -1);
+      return parseFloat(val) / 100;
+    }
+
+    function parseDuration(str) {
+      const count = str.slice(0, -1);
+      const unit = str.slice(-1);
+      if (!DURATIONS.has(unit)) {
+        return parseInt(str);
+      }
+      return parseInt(count) * DURATIONS.get(unit);
+    }
+
+    function renderDuration(seconds) {
+      seconds = Math.ceil(seconds);
+      if (isNaN(seconds)) {
+        return "never";
+      }
+      const out = [];
+      for (const [c, n] of DURATIONS) {
+        let i = 0;
+        while (seconds >= n) {
+          i += 1;
+          seconds -= n;
+        }
+        if (i > 0) {
+          out.push(`${i}${c}`);
+        }
+      }
+      return out.join(' ');
+    }
+
+    function renderPercentage(value) {
+      return (value * 100).toFixed(2) + '%';
+    }
+
+    document.addEventListener("DOMContentLoaded", calculate);
+    document.querySelectorAll("input").forEach(el => el.addEventListener("input", calculate));
+  </script>
+</body>
