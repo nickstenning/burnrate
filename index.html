@@ -73,6 +73,14 @@
       border-radius: 0.25rem;
     }
 
+    .form-group small {
+      display: inline-block;
+      color: #888;
+      font-size: 0.8rem;
+      line-height: 1.1rem;
+      margin-top: 0.25rem;
+    }
+
     .results {
       border: 1px solid var(--border);
       border-collapse: separate;
@@ -142,14 +150,22 @@
       <div class="form-group">
         <label for="slo">SLO</label>
         <input name="slo" type="text" value="99.9%">
+        <small>What percentage of events need to be "good" events?</small>
       </div>
       <div class="form-group">
         <label for="slo-interval">SLO lookback interval</label>
         <input name="slo-interval" type="text" value="30d">
+        <small>Over what interval will the SLO be tracked?</small>
       </div>
       <div class="form-group">
         <label for="exhaustion-interval">Burn alert exhaustion interval</label>
         <input name="exhaustion-interval" type="text" value="1d">
+        <small>How long before budget exhaustion should you be alerted?</small>
+      </div>
+      <div class="form-group">
+        <label for="error-interval">Error interval</label>
+        <input name="error-interval" type="text" value="">
+        <small>For how long are errors seen? (Leave blank for "continuously")</small>
       </div>
     </form>
 
@@ -237,11 +253,13 @@
       <li>You'll be alerted to total failure in about <code>2m 32s</code>.</li>
       <li>You'll be alerted to a 10% failure rate after a bit more than <code>25m</code>.</li>
       <li>
-        Even though it's above the SLO error rate of <code>0.05%</code>, an
-        error rate of <code>1%</code> will never trigger an alert, because it
-        will take more than <code>16h</code> for an error rate of <code>1%</code>
-        to exhaust your error budget, and that's longer than the alert
-        exhaustion interval of <code>6h</code>.
+        A failure rate of <code>1%</code> will burn down your budget, and after
+        about <code>11h</code> you will be less than 6h away from exhausting
+        your budget, and you'll be alerted.
+      </li>
+      <li>
+        A failure rate of <code>0.01%</code> is well below your SLO error rate of
+        <code>0.05%</code> so you'll never be alerted.
       </li>
     </ul>
     <h2>Why have I burned 25% of my budget by the time the alert fires?</h2>
@@ -255,29 +273,14 @@
       In Honeycomb, you don't configure burn rate and lookback interval
       independently. You specify an error budget exhaustion interval which
       defines the sensitivity of the alert, and &frac14; of that exhaustion
-      interval is used as the alert lookback interval. That means that when the
-      alert fires, you've consumed (at least) 25% of your error budget.
-    </p>
-    <h2>Why does it say that I'll burn more than 100% of my error budget?</h2>
-    <p>
-      Because that's what will happen if you choose an alert exhaustion
-      interval shorter than your SLO lookback interval!
+      interval is used as the alert lookback interval.
     </p>
     <p>
-      This is why it's often a good idea to:
+      That means that for high burn rates (when you would otherwise burn all of
+      your budget within the alert exhaustion window) an alert will fire once
+      you've consumed 25% of your error budget. Smaller burn rates will alert
+      later, after burning down more of your budget.
     </p>
-    <ul>
-      <li>
-        Configure a burn alert with a long exhaustion interval to notify you
-        non-urgently (e.g. via Slack, a ticketing system, or email) about smaller
-        burn rates.
-      </li>
-      <li>
-        Keep an eye on your error budget over time so that you can adjust your
-        team's behaviour. Budget burning down faster than you'd like? Fix some
-        bugs or ease off on the risky changes.
-      </li>
-    </ul>
     <h2>Can it show me how long it would take to burn down my error budget completely?</h2>
     <p>
       Yes! Put <code>0</code> (zero) in the exhaustion interval box.
@@ -332,37 +335,48 @@
         const cell = results.querySelector(`tr:nth-child(${2 + errorRateIdx}) td:nth-of-type(1)`);
         const budgetCell = results.querySelector(`tr:nth-child(${2 + errorRateIdx}) td:nth-of-type(2)`);
 
-        if (isNaN(result.alertsAfter)) {
-          cell.classList.add('no-alert');
-          cell.classList.remove('alert');
-        } else {
+        const doesAlert = !isNaN(result.alertsAfter) && (isNaN(p.errorInterval) || result.alertsAfter < p.errorInterval);
+
+        if (doesAlert) {
+          cell.textContent = renderDuration(result.alertsAfter);
           cell.classList.add('alert');
           cell.classList.remove('no-alert');
+          budgetCell.textContent = renderPercentage(result.budgetBurned);
+        } else {
+          cell.textContent = renderDuration(NaN);
+          cell.classList.add('no-alert');
+          cell.classList.remove('alert');
+          const errorInterval = isNaN(p.errorInterval) ? p.sloInterval : p.errorInterval;
+          const budgetInterval = isNaN(result.alertsAfter) ? p.sloInterval : result.alertsAfter;
+          const factor = errorInterval / budgetInterval;
+          budgetCell.textContent = renderPercentage(result.budgetBurned * factor);
         }
-        cell.textContent = renderDuration(result.alertsAfter);
-        budgetCell.textContent = renderPercentage(result.budgetBurned);
       });
     }
 
     function timeToAlert(errorRate, slo, sloInterval, exhaustionInterval) {
+      const lookbackFactor = 0.25;
       const sloErrorRate = 1 - slo;
-      const burnRatio = errorRate / sloErrorRate;
-      const maxBurnRatio = exhaustionInterval === 0 ? 1 : sloInterval / exhaustionInterval;
-      const lookbackInterval = exhaustionInterval === 0 ? sloInterval : LOOKBACK_FRACTION * exhaustionInterval;
 
       let result = {
         alertsAfter: NaN,
         budgetBurned: 0,
-        burnRatio: burnRatio,
       };
 
-      if (burnRatio > maxBurnRatio) {
-        result.alertsAfter = lookbackInterval * (maxBurnRatio / burnRatio);
-        result.budgetBurned = burnRatio * (result.alertsAfter/sloInterval);
-      } else {
-        result.budgetBurned = burnRatio;
+      if (errorRate < sloErrorRate) {
+        result.budgetBurned = errorRate/sloErrorRate;
+        return result;
       }
 
+      const timeToExhaustion = sloInterval * sloErrorRate / errorRate;
+
+      if ((1 - lookbackFactor) * timeToExhaustion > exhaustionInterval + 1e-6) {
+        result.alertsAfter = timeToExhaustion - exhaustionInterval;
+        result.budgetBurned = 1 - exhaustionInterval / timeToExhaustion;
+      } else {
+        result.alertsAfter = lookbackFactor * timeToExhaustion;
+        result.budgetBurned = lookbackFactor;
+      }
       return result;
     }
 
@@ -370,6 +384,7 @@
       const slo = parseFloat(form['slo'].value) / 100;
       const sloInterval = parseDuration(form['slo-interval'].value);
       const exhaustionInterval = parseDuration(form['exhaustion-interval'].value);
+      let errorInterval = parseDuration(form['error-interval'].value);
 
       if (isNaN(slo) || isNaN(sloInterval) || isNaN(exhaustionInterval)) {
         return false;
@@ -387,7 +402,16 @@
         return false;
       }
 
-      return { slo, sloInterval, exhaustionInterval };
+      if (errorInterval < 0) {
+        return false;
+      }
+
+      // Maximum allowable error interval is the SLO interval
+      if (errorInterval > sloInterval) {
+        errorInterval = sloInterval;
+      }
+
+      return { slo, sloInterval, exhaustionInterval, errorInterval };
     }
 
     function parsePercentage(str) {
